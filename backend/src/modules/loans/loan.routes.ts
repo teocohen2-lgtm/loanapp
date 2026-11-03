@@ -14,17 +14,29 @@ import {
   calculatorSchema,
   overrideSchema,
   policySchema,
-  repaymentSchema,
+  chequeToggleSchema,
+  receivingAccountSchema,
   reviewApplicationSchema,
+  reviewPaymentSchema,
+  submitPaymentSchema,
 } from "./loan.schemas";
 
-import { getMyApplication, quoteLoan, submitApplication } from "./loan.service";
+import { quoteLoan, submitApplication } from "./loan.service";
+import { buildLedger } from "./loan.ledger";
+import {
+  getLoanStatement,
+  getPaymentInfo,
+  listPaymentsForStaff,
+  reviewPayment,
+  submitPayment,
+} from "./loan.payment.service";
+import { detectImageExt, qrUpload } from "../../middleware/upload";
+import { readFile, removeFile, saveFile } from "../../services/storage";
 
 import { createProductPricing, setBorrowerRate } from "./loan.admin.service";
 
 import {
   disburseApplication,
-  payNextInstallment,
   reviewApplication,
 } from "./loan.workflow.service";
 
@@ -32,6 +44,32 @@ export const loanRouter = Router();
 
 const uuid = z.string().uuid();
 const pageParam = z.coerce.number().int().min(1).max(100000);
+
+const accountKind = z.enum(["GCASH", "MAYA", "BANK"]);
+const staff = requireRole("REVIEWER", "ADMIN");
+
+const paymentSelect = {
+  id: true,
+  amount: true,
+  status: true,
+  method: true,
+  reference: true,
+  rejectionReason: true,
+  createdAt: true,
+} as const;
+
+/** Adds the approved-only statement summary to a loan, and drops the raw payment list. */
+function withSummary<
+  T extends { quote: unknown; payments: Parameters<typeof buildLedger>[1] }
+>(loan: T) {
+  const { payments, ...rest } = loan;
+  const ledger = buildLedger(
+    loan.quote as Parameters<typeof buildLedger>[0],
+    payments
+  );
+  const { installments: _installments, ...summary } = ledger;
+  return { ...rest, summary };
+}
 
 // Every loan endpoint requires authentication.
 loanRouter.use(authenticate);
@@ -131,13 +169,13 @@ loanRouter.get("/applications", requireRole("BORROWER"), async (req, res) => {
 
   const items = await prisma.loanApplication.findMany({
     where: { userId: req.user!.id },
-    include: { repayments: { select: { installmentNo: true } } },
+    include: { payments: { select: paymentSelect } },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     skip: (page - 1) * pageSize,
     take: pageSize,
   });
 
-  res.json({ items, page, pageSize });
+  res.json({ items: items.map(withSummary), page, pageSize });
 });
 
 // GET /api/loans/applications/:id
@@ -146,21 +184,42 @@ loanRouter.get(
   requireRole("BORROWER"),
   async (req, res) => {
     const id = uuid.parse(req.params.id);
-    const application = await getMyApplication(req.user!.id, id);
-    res.json({ application });
+    res.json(await getLoanStatement(id, req.user!.id));
   }
 );
 
-// POST /api/loans/applications/:id/payments — pay the next installment (mock rails).
+// GET /api/loans/payment-info — where to send money, and which methods this borrower may use.
+loanRouter.get("/payment-info", requireRole("BORROWER"), async (req, res) => {
+  res.json(await getPaymentInfo(req.user!.id));
+});
+
+// GET /api/loans/payment-accounts/:kind/qr — the QR image for a receiving account.
+loanRouter.get("/payment-accounts/:kind/qr", async (req, res) => {
+  const kind = accountKind.parse(req.params.kind);
+  const account = await prisma.receivingAccount.findUnique({ where: { kind } });
+  const file =
+    account?.active && account.qrKey ? await readFile(account.qrKey) : null;
+  if (!file) throw ApiError.notFound("QR code not available");
+  res.setHeader(
+    "Content-Type",
+    account!.qrKey!.endsWith(".png") ? "image/png" : "image/jpeg"
+  );
+  res.setHeader("Cache-Control", "private, max-age=60");
+  res.send(file);
+});
+
+// POST /api/loans/applications/:id/payments — "I paid": goes to approval, not to the books.
 loanRouter.post(
   "/applications/:id/payments",
   requireRole("BORROWER"),
-  validate(repaymentSchema),
+  validate(submitPaymentSchema),
   async (req, res) => {
     const id = uuid.parse(req.params.id);
-    const { method } = req.body as z.infer<typeof repaymentSchema>;
-
-    const result = await payNextInstallment(req.user!.id, id, method);
+    const result = await submitPayment(
+      req.user!.id,
+      id,
+      req.body as z.infer<typeof submitPaymentSchema>
+    );
     res.status(201).json(result);
   }
 );
@@ -188,14 +247,14 @@ loanRouter.get(
             kycProfile: { select: { fullName: true } },
           },
         },
-        repayments: { select: { installmentNo: true } },
+        payments: { select: paymentSelect },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       skip: (page - 1) * pageSize,
       take: pageSize,
     });
 
-    res.json({ items, page, pageSize });
+    res.json({ items: items.map(withSummary), page, pageSize });
   }
 );
 
@@ -254,6 +313,7 @@ loanRouter.get("/admin/borrowers", requireRole("ADMIN"), async (_req, res) => {
       id: true,
       mobileNumber: true,
       kycStatus: true,
+      chequeAllowed: true,
       createdAt: true,
       kycProfile: { select: { fullName: true } },
       rateOverride: { select: { monthlyRatePercent: true } },
@@ -274,5 +334,134 @@ loanRouter.put(
     const input = req.body as z.infer<typeof overrideSchema>;
     const result = await setBorrowerRate(req.user!.id, userId, input);
     res.json({ demoOnly: true, ...result });
+  }
+);
+
+// ------------------------------------------------- payment approval (staff)
+
+// GET /api/loans/admin/payments?status=PENDING&page=1 — admin or reviewer.
+loanRouter.get("/admin/payments", staff, async (req, res) => {
+  const status = z
+    .enum(["PENDING", "APPROVED", "REJECTED"])
+    .default("PENDING")
+    .parse(req.query.status || undefined);
+  const page = pageParam.parse(req.query.page ?? 1);
+  res.json(await listPaymentsForStaff(status, page));
+});
+
+// PATCH /api/loans/admin/payments/:id/review — approve (received) or reject (not received).
+loanRouter.patch(
+  "/admin/payments/:id/review",
+  staff,
+  validate(reviewPaymentSchema),
+  async (req, res) => {
+    const id = uuid.parse(req.params.id);
+    res.json(
+      await reviewPayment(
+        req.user!.id,
+        id,
+        req.body as z.infer<typeof reviewPaymentSchema>
+      )
+    );
+  }
+);
+
+// GET /api/loans/admin/applications/:id/statement — what was paid, what is left.
+loanRouter.get("/admin/applications/:id/statement", staff, async (req, res) => {
+  const id = uuid.parse(req.params.id);
+  res.json(await getLoanStatement(id));
+});
+
+// --------------------------------------- receiving accounts + cheque (admin)
+
+// GET /api/loans/admin/payment-accounts
+loanRouter.get(
+  "/admin/payment-accounts",
+  requireRole("ADMIN"),
+  async (_req, res) => {
+    const items = await prisma.receivingAccount.findMany({
+      orderBy: { kind: "asc" },
+    });
+    res.json({
+      items: items.map(({ qrKey, ...a }) => ({ ...a, hasQr: !!qrKey })),
+    });
+  }
+);
+
+// PUT /api/loans/admin/payment-accounts/:kind — create or update the account details.
+loanRouter.put(
+  "/admin/payment-accounts/:kind",
+  requireRole("ADMIN"),
+  validate(receivingAccountSchema),
+  async (req, res) => {
+    const kind = accountKind.parse(req.params.kind);
+    const input = req.body as z.infer<typeof receivingAccountSchema>;
+    const data = {
+      accountName: input.accountName,
+      accountNumber: input.accountNumber,
+      bankName: kind === "BANK" ? input.bankName || null : null,
+      instructions: input.instructions || null,
+      active: input.active,
+    };
+    const { qrKey, ...account } = await prisma.receivingAccount.upsert({
+      where: { kind },
+      create: { kind, ...data },
+      update: data,
+    });
+    res.json({ account: { ...account, hasQr: !!qrKey } });
+  }
+);
+
+// POST /api/loans/admin/payment-accounts/:kind/qr — upload the QR image (JPEG or PNG).
+loanRouter.post(
+  "/admin/payment-accounts/:kind/qr",
+  requireRole("ADMIN"),
+  qrUpload,
+  async (req, res) => {
+    const kind = accountKind.parse(req.params.kind);
+    if (kind === "BANK")
+      throw ApiError.badRequest("Bank accounts do not use a QR code");
+
+    const account = await prisma.receivingAccount.findUnique({
+      where: { kind },
+    });
+    if (!account)
+      throw ApiError.conflict(
+        "Save the account details first, then upload the QR"
+      );
+
+    const file = req.file;
+    const ext = file ? detectImageExt(file.buffer) : null;
+    if (!file || !ext) throw ApiError.badRequest("Upload a JPEG or PNG image");
+
+    const key = await saveFile(file.buffer, "qr", ext);
+    await prisma.receivingAccount.update({
+      where: { kind },
+      data: { qrKey: key },
+    });
+    if (account.qrKey) await removeFile(account.qrKey);
+
+    res.status(201).json({ ok: true });
+  }
+);
+
+// PUT /api/loans/admin/borrowers/:userId/cheque — switch cheque payments on/off for one borrower.
+loanRouter.put(
+  "/admin/borrowers/:userId/cheque",
+  requireRole("ADMIN"),
+  validate(chequeToggleSchema),
+  async (req, res) => {
+    const userId = uuid.parse(req.params.userId);
+    const { allowed } = req.body as z.infer<typeof chequeToggleSchema>;
+    const user = await prisma.user.findFirst({
+      where: { id: userId, role: "BORROWER" },
+      select: { id: true },
+    });
+    if (!user) throw ApiError.notFound("Borrower not found");
+    await prisma.user.update({
+      where: { id: userId },
+      data: { chequeAllowed: allowed },
+    });
+    res.json({ userId, chequeAllowed: allowed });
   }
 );

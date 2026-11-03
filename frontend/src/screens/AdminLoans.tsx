@@ -26,20 +26,36 @@ const FILTERS: { label: string; value: LoanStatus | undefined }[] = [
 export default function AdminLoans({ token }: { token: string }) {
   const [filter, setFilter] = useState<LoanStatus | undefined>("SUBMITTED");
   const meta = useResource(() => getMeta(), []);
-  const loans = useResource(() => adminListApplications(token, filter), [token, filter]);
+  const loans = useResource(
+    () => adminListApplications(token, filter),
+    [token, filter]
+  );
   const [notice, setNotice] = useState("");
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold">Loan applications</h1>
-        <p className="mt-2 text-slate-500">Approve or reject applications, then release approved loans.</p>
+        <p className="mt-2 text-slate-500">
+          Approve or reject applications, then release approved loans.
+        </p>
       </div>
 
       <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
-          <button key={f.label} onClick={() => { setFilter(f.value); setNotice(""); }} aria-pressed={filter === f.value}
-            className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${filter === f.value ? "border-emerald-900 bg-emerald-900 text-white" : "border-slate-300 bg-white hover:bg-slate-50"}`}>
+          <button
+            key={f.label}
+            onClick={() => {
+              setFilter(f.value);
+              setNotice("");
+            }}
+            aria-pressed={filter === f.value}
+            className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${
+              filter === f.value
+                ? "border-emerald-900 bg-emerald-900 text-white"
+                : "border-slate-300 bg-white hover:bg-slate-50"
+            }`}
+          >
             {f.label}
           </button>
         ))}
@@ -58,8 +74,16 @@ export default function AdminLoans({ token }: { token: string }) {
       ) : (
         <div className="grid gap-4">
           {loans.data.items.map((a) => (
-            <ApplicationRow key={a.id} token={token} app={a} payout={describePayout(a, meta.data!)}
-              onChanged={(message) => { setNotice(message); loans.reload(); }} />
+            <ApplicationRow
+              key={a.id}
+              token={token}
+              app={a}
+              payout={describePayout(a, meta.data!)}
+              onChanged={(message) => {
+                setNotice(message);
+                loans.reload();
+              }}
+            />
           ))}
         </div>
       )}
@@ -102,10 +126,14 @@ function ApplicationRow({
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <p className="text-xl font-bold">
-            {formatPeso(app.principal)} <span className="text-sm font-normal text-slate-500">· {app.termMonths} month{app.termMonths === 1 ? "" : "s"}</span>
+            {formatPeso(app.principal)}{" "}
+            <span className="text-sm font-normal text-slate-500">
+              · {app.termMonths} month{app.termMonths === 1 ? "" : "s"}
+            </span>
           </p>
           <p className="mt-1 text-sm text-slate-600">
-            {app.user?.kycProfile?.fullName ?? "Borrower"} · {app.user?.mobileNumber}
+            {app.user?.kycProfile?.fullName ?? "Borrower"} ·{" "}
+            {app.user?.mobileNumber}
           </p>
         </div>
         <StatusBadge status={app.status} />
@@ -116,34 +144,101 @@ function ApplicationRow({
         <Cell label="Net proceeds" value={formatPeso(q.netProceeds)} />
         <Cell label="Total repayment" value={formatPeso(q.totalRepayment)} />
         <Cell label="Applied" value={formatDate(app.createdAt)} />
+        {app.summary &&
+          (app.status === "DISBURSED" || app.status === "REPAID") && (
+            <>
+              <Cell
+                label="Paid (approved)"
+                value={`${formatPeso(app.summary.approvedPaid)} · ${
+                  app.summary.paidInstallments
+                } of ${app.termMonths} installments`}
+              />
+              <Cell
+                label="Remaining"
+                value={formatPeso(app.summary.remaining)}
+              />
+              <Cell
+                label="Waiting for approval"
+                value={formatPeso(app.summary.pendingAmount)}
+              />
+              <Cell
+                label="Overdue installments"
+                value={String(app.summary.overdueCount)}
+              />
+            </>
+          )}
         <div className="sm:col-span-4">
           <Cell label="Payout" value={payout} />
         </div>
       </dl>
 
-      {app.rejectionReason && <p className="mt-3 text-sm text-red-700">Rejected: {app.rejectionReason}</p>}
-      {app.disbursementRef && <p className="mt-3 text-sm text-slate-500">Disbursement ref {app.disbursementRef}</p>}
+      {app.rejectionReason && (
+        <p className="mt-3 text-sm text-red-700">
+          Rejected: {app.rejectionReason}
+        </p>
+      )}
+      {app.disbursementRef && (
+        <p className="mt-3 text-sm text-slate-500">
+          Disbursement ref {app.disbursementRef}
+        </p>
+      )}
 
-      {error && <div className="mt-4"><Alert>{error}</Alert></div>}
+      {error && (
+        <div className="mt-4">
+          <Alert>{error}</Alert>
+        </div>
+      )}
 
       {app.status === "SUBMITTED" && (
         <div className="mt-4 space-y-3">
           {rejecting && (
-            <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="Reason for rejection" maxLength={300}
-              aria-label="Reason for rejection" className={inputCls} />
+            <input
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              placeholder="Reason for rejection"
+              maxLength={300}
+              aria-label="Reason for rejection"
+              className={inputCls}
+            />
           )}
           <div className="flex flex-wrap gap-3">
-            <Button disabled={busy} onClick={() => void act(async () => {
-              await adminReviewApplication(token, app.id, { decision: "APPROVED" });
-              return "Application approved.";
-            })}>Approve</Button>
+            <Button
+              disabled={busy}
+              onClick={() =>
+                void act(async () => {
+                  await adminReviewApplication(token, app.id, {
+                    decision: "APPROVED",
+                  });
+                  return "Application approved.";
+                })
+              }
+            >
+              Approve
+            </Button>
             {!rejecting ? (
-              <Button variant="secondary" disabled={busy} onClick={() => setRejecting(true)}>Reject…</Button>
+              <Button
+                variant="secondary"
+                disabled={busy}
+                onClick={() => setRejecting(true)}
+              >
+                Reject…
+              </Button>
             ) : (
-              <Button variant="danger" disabled={busy || reason.trim().length < 3} onClick={() => void act(async () => {
-                await adminReviewApplication(token, app.id, { decision: "REJECTED", reason: reason.trim() });
-                return "Application rejected.";
-              })}>Confirm rejection</Button>
+              <Button
+                variant="danger"
+                disabled={busy || reason.trim().length < 3}
+                onClick={() =>
+                  void act(async () => {
+                    await adminReviewApplication(token, app.id, {
+                      decision: "REJECTED",
+                      reason: reason.trim(),
+                    });
+                    return "Application rejected.";
+                  })
+                }
+              >
+                Confirm rejection
+              </Button>
             )}
           </div>
         </div>
@@ -151,10 +246,17 @@ function ApplicationRow({
 
       {app.status === "APPROVED" && (
         <div className="mt-4">
-          <Button disabled={busy} onClick={() => void act(async () => {
-            const r = await adminDisburse(token, app.id);
-            return `Released ${formatPeso(r.amount)} (${r.eta}).`;
-          })}>{busy ? "Releasing…" : `Release ${formatPeso(q.netProceeds)}`}</Button>
+          <Button
+            disabled={busy}
+            onClick={() =>
+              void act(async () => {
+                const r = await adminDisburse(token, app.id);
+                return `Released ${formatPeso(r.amount)} (${r.eta}).`;
+              })
+            }
+          >
+            {busy ? "Releasing…" : `Release ${formatPeso(q.netProceeds)}`}
+          </Button>
         </div>
       )}
     </article>

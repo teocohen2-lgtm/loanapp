@@ -94,14 +94,69 @@ export type LoanStatus =
   | "DISBURSED"
   | "REPAID";
 
-export type Repayment = {
+// export type Repayment = {
+//   id: string;
+//   installmentNo: number;
+//   amount: string;
+//   method: PaymentMethod;
+//   reference: string;
+//   createdAt: string;
+// };
+
+export type CollectionMethod =
+  | "GCASH_QR"
+  | "MAYA_QR"
+  | "BANK_TRANSFER"
+  | "CHEQUE";
+export type PaymentStatus = "PENDING" | "APPROVED" | "REJECTED";
+
+/** A payment the borrower reported. Counts toward the loan only once APPROVED. */
+export type Payment = {
   id: string;
-  installmentNo: number;
   amount: string;
-  method: PaymentMethod;
+  status: PaymentStatus;
+  method: CollectionMethod;
   reference: string;
+  note?: string | null;
+  rejectionReason: string | null;
+  reviewedAt?: string | null;
   createdAt: string;
 };
+
+export type InstallmentState = {
+  installment: number;
+  dueDate: string;
+  amountDue: string;
+  paid: string;
+  remaining: string;
+  status: "PAID" | "PARTIAL" | "UNPAID";
+  overdue: boolean;
+};
+
+export type RejectedPayment = {
+  id: string;
+  amount: string;
+  method: CollectionMethod;
+  reference: string;
+  reason: string | null;
+  createdAt: string;
+};
+
+/** Statement numbers built from APPROVED payments only. */
+export type LoanSummary = {
+  totalDue: string;
+  approvedPaid: string;
+  pendingAmount: string;
+  pendingCount: number;
+  remaining: string;
+  availableToSubmit: string;
+  paidInstallments: number;
+  overdueCount: number;
+  next: InstallmentState | null;
+  rejectedNeedingAction: RejectedPayment[];
+};
+
+export type LoanLedger = LoanSummary & { installments: InstallmentState[] };
 
 export type Application = {
   id: string;
@@ -118,7 +173,7 @@ export type Application = {
   disbursementRef: string | null;
   disbursedAt: string | null;
   rejectionReason: string | null;
-  repayments?: { installmentNo: number }[] | Repayment[];
+  summary?: LoanSummary;
   user?: { mobileNumber: string; kycProfile: { fullName: string } | null };
 };
 
@@ -414,21 +469,76 @@ export const applyForLoan = (token: string, body: ApplyBody) =>
 export const listApplications = (token: string) =>
   apiRequest<{ items: Application[] }>("/api/loans/applications", {}, token);
 
+// export const getApplication = (token: string, id: string) =>
+//   apiRequest<{ application: Application & { repayments: Repayment[] } }>(
+//     `/api/loans/applications/${id}`,
+//     {},
+//     token
+//   );
+
+// export const payInstallment = (
+//   token: string,
+//   id: string,
+//   method: PaymentMethod
+// ) =>
+//   apiRequest<{ repayment: Repayment; status: LoanStatus }>(
+//     `/api/loans/applications/${id}/payments`,
+//     json({ method }),
+//     token
+//   );
+
 export const getApplication = (token: string, id: string) =>
-  apiRequest<{ application: Application & { repayments: Repayment[] } }>(
-    `/api/loans/applications/${id}`,
+  apiRequest<{
+    application: Application;
+    payments: Payment[];
+    ledger: LoanLedger;
+  }>(`/api/loans/applications/${id}`, {}, token);
+
+export type PayMethodInfo = {
+  value: CollectionMethod;
+  label: string;
+  kind: "GCASH" | "MAYA" | "BANK";
+  accountName: string;
+  accountNumber: string;
+  bankName: string | null;
+  instructions: string | null;
+  hasQr: boolean;
+};
+
+export const getPaymentInfo = (token: string) =>
+  apiRequest<{
+    methods: PayMethodInfo[];
+    chequeAllowed: boolean;
+    minAmount: string;
+  }>("/api/loans/payment-info", {}, token);
+
+/** The QR image needs the bearer token, so it is fetched as a blob and shown through an object URL. */
+export async function fetchQrUrl(
+  token: string,
+  kind: "GCASH" | "MAYA"
+): Promise<string | null> {
+  const response = await send(
+    `/api/loans/payment-accounts/${kind}/qr`,
     {},
     token
   );
+  if (!response.ok) return null;
+  return URL.createObjectURL(await response.blob());
+}
 
-export const payInstallment = (
+export const submitPayment = (
   token: string,
   id: string,
-  method: PaymentMethod
+  body: {
+    method: CollectionMethod;
+    amount: string;
+    reference: string;
+    note?: string;
+  }
 ) =>
-  apiRequest<{ repayment: Repayment; status: LoanStatus }>(
+  apiRequest<{ payment: Payment }>(
     `/api/loans/applications/${id}/payments`,
-    json({ method }),
+    json(body),
     token
   );
 
@@ -483,6 +593,7 @@ export type AdminBorrower = {
   kycStatus: KycStatus;
   kycProfile: { fullName: string } | null;
   rateOverride: { monthlyRatePercent: string } | null;
+  chequeAllowed: boolean;
 };
 
 export const adminListBorrowers = (token: string) =>
@@ -502,6 +613,97 @@ export const adminSetBorrowerRate = (
     { method: "PUT", body: JSON.stringify(body) },
     token
   );
+
+export const adminSetCheque = (
+  token: string,
+  userId: string,
+  allowed: boolean
+) =>
+  apiRequest<{ userId: string; chequeAllowed: boolean }>(
+    `/api/loans/admin/borrowers/${userId}/cheque`,
+    { method: "PUT", body: JSON.stringify({ allowed }) },
+    token
+  );
+
+export type StaffPayment = Payment & {
+  borrowerName: string;
+  borrowerMobile: string;
+  applicationId: string;
+  loan: {
+    id: string;
+    principal: string;
+    termMonths: number;
+    totalDue: string;
+    approvedPaid: string;
+    remaining: string;
+  };
+};
+
+export const adminListPayments = (token: string, status: PaymentStatus) =>
+  apiRequest<{ items: StaffPayment[] }>(
+    `/api/loans/admin/payments?status=${status}`,
+    {},
+    token
+  );
+
+export const adminReviewPayment = (
+  token: string,
+  id: string,
+  body: { decision: "APPROVED" | "REJECTED"; reason?: string }
+) =>
+  apiRequest<{ payment: Payment; loanStatus: LoanStatus }>(
+    `/api/loans/admin/payments/${id}/review`,
+    { method: "PATCH", body: JSON.stringify(body) },
+    token
+  );
+
+export type ReceivingAccount = {
+  kind: "GCASH" | "MAYA" | "BANK";
+  accountName: string;
+  accountNumber: string;
+  bankName: string | null;
+  instructions: string | null;
+  active: boolean;
+  hasQr: boolean;
+};
+
+export const adminListAccounts = (token: string) =>
+  apiRequest<{ items: ReceivingAccount[] }>(
+    "/api/loans/admin/payment-accounts",
+    {},
+    token
+  );
+
+export const adminSaveAccount = (
+  token: string,
+  kind: ReceivingAccount["kind"],
+  body: {
+    accountName: string;
+    accountNumber: string;
+    bankName?: string;
+    instructions?: string;
+    active: boolean;
+  }
+) =>
+  apiRequest<{ account: ReceivingAccount }>(
+    `/api/loans/admin/payment-accounts/${kind}`,
+    { method: "PUT", body: JSON.stringify(body) },
+    token
+  );
+
+export const adminUploadQr = (
+  token: string,
+  kind: "GCASH" | "MAYA",
+  file: File
+) => {
+  const form = new FormData();
+  form.append("qr", file);
+  return apiRequest<{ ok: boolean }>(
+    `/api/loans/admin/payment-accounts/${kind}/qr`,
+    { method: "POST", body: form },
+    token
+  );
+};
 
 // ------------------------------------------------------------------- reports
 

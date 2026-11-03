@@ -33,3 +33,14 @@ export function detectImageExt(buf: Buffer): "jpg" | "png" | null {
     return "png";
   return null;
 }
+
+/** One QR image (JPEG or PNG, up to 2 MB) in the form field "qr". Content is verified by detectImageExt. */
+export const qrUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 2 * 1024 * 1024, files: 1, fields: 2, fieldSize: 1024 },
+  fileFilter(_req, file, cb) {
+    if (["image/jpeg", "image/png"].includes(file.mimetype))
+      return cb(null, true);
+    cb(ApiError.badRequest("Only JPEG or PNG images are allowed"));
+  },
+}).single("qr");

@@ -2,7 +2,7 @@ import { Prisma } from "@prisma/client";
 
 import { prisma } from "../../lib/prisma";
 import { ApiError } from "../../utils/ApiError";
-import { mockCollect, mockDisburse } from "../../services/mock/payments";
+import { mockDisburse } from "../../services/mock/payments";
 import type { PaymentMethodValue } from "../../config/ph";
 
 type Tx = Prisma.TransactionClient;
@@ -14,7 +14,7 @@ type QuoteSnapshot = {
 };
 
 /** Serialize all state changes for one application across API processes. */
-async function lockApplication(tx: Tx, id: string) {
+export async function lockApplication(tx: Tx, id: string) {
   await tx.$queryRaw`SELECT "id" FROM "LoanApplication" WHERE "id" = ${id} FOR UPDATE`;
 }
 
@@ -44,7 +44,9 @@ export async function reviewApplication(
     });
     if (!application) throw ApiError.notFound("Application not found");
     if (application.status !== "SUBMITTED")
-      throw ApiError.conflict(`Application is already ${application.status.toLowerCase()}`);
+      throw ApiError.conflict(
+        `Application is already ${application.status.toLowerCase()}`
+      );
 
     return tx.loanApplication.update({
       where: { id: applicationId },
@@ -63,7 +65,10 @@ export async function reviewApplication(
  * The provider is a mock: if it rejects, the transaction rolls back and the
  * application stays APPROVED so the admin can retry.
  */
-export async function disburseApplication(actorId: string, applicationId: string) {
+export async function disburseApplication(
+  actorId: string,
+  applicationId: string
+) {
   return prisma.$transaction(async (tx) => {
     await lockApplication(tx, applicationId);
     await assertAdmin(tx, actorId);
@@ -91,53 +96,64 @@ export async function disburseApplication(actorId: string, applicationId: string
         disbursementRef: transfer.reference,
       },
     });
-    return { application: updated, eta: transfer.eta, amount: quote.netProceeds };
+    return {
+      application: updated,
+      eta: transfer.eta,
+      amount: quote.netProceeds,
+    };
   });
 }
 
-/** Borrower pays the next unpaid installment in full through a chosen channel. */
-export async function payNextInstallment(
-  userId: string,
-  applicationId: string,
-  method: PaymentMethodValue
-) {
-  return prisma.$transaction(async (tx) => {
-    await lockApplication(tx, applicationId);
+// /** Borrower pays the next unpaid installment in full through a chosen channel. */
+// export async function payNextInstallment(
+//   userId: string,
+//   applicationId: string,
+//   method: PaymentMethodValue
+// ) {
+//   return prisma.$transaction(async (tx) => {
+//     await lockApplication(tx, applicationId);
 
-    const application = await tx.loanApplication.findFirst({
-      where: { id: applicationId, userId },
-      include: { repayments: { select: { installmentNo: true } } },
-    });
-    if (!application) throw ApiError.notFound("Application not found");
-    if (application.status !== "DISBURSED")
-      throw ApiError.conflict("Payments are accepted only on disbursed, unpaid loans");
+//     const application = await tx.loanApplication.findFirst({
+//       where: { id: applicationId, userId },
+//       include: { repayments: { select: { installmentNo: true } } },
+//     });
+//     if (!application) throw ApiError.notFound("Application not found");
+//     if (application.status !== "DISBURSED")
+//       throw ApiError.conflict(
+//         "Payments are accepted only on disbursed, unpaid loans"
+//       );
 
-    const quote = quoteOf(application.quote);
-    const installmentNo = application.repayments.length + 1;
-    const row = quote.schedule[installmentNo - 1];
-    if (!row) throw ApiError.conflict("This loan has no remaining installments");
+//     const quote = quoteOf(application.quote);
+//     const installmentNo = application.repayments.length + 1;
+//     const row = quote.schedule[installmentNo - 1];
+//     if (!row)
+//       throw ApiError.conflict("This loan has no remaining installments");
 
-    const collected = await mockCollect({ method, amount: row.payment });
+//     const collected = await mockCollect({ method, amount: row.payment });
 
-    const repayment = await tx.repayment.create({
-      data: {
-        applicationId,
-        userId,
-        installmentNo,
-        amount: row.payment,
-        method,
-        reference: collected.reference,
-      },
-    });
+//     const repayment = await tx.repayment.create({
+//       data: {
+//         applicationId,
+//         userId,
+//         installmentNo,
+//         amount: row.payment,
+//         method,
+//         reference: collected.reference,
+//       },
+//     });
 
-    const fullyPaid = installmentNo === quote.schedule.length;
-    const updated = fullyPaid
-      ? await tx.loanApplication.update({
-          where: { id: applicationId },
-          data: { status: "REPAID" },
-        })
-      : application;
+//     const fullyPaid = installmentNo === quote.schedule.length;
+//     const updated = fullyPaid
+//       ? await tx.loanApplication.update({
+//           where: { id: applicationId },
+//           data: { status: "REPAID" },
+//         })
+//       : application;
 
-    return { repayment, status: fullyPaid ? "REPAID" : "DISBURSED", application: updated };
-  });
-}
+//     return {
+//       repayment,
+//       status: fullyPaid ? "REPAID" : "DISBURSED",
+//       application: updated,
+//     };
+//   });
+// }

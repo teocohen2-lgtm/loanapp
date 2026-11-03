@@ -65,7 +65,7 @@ export async function buildReport(
             kycProfile: { select: { fullName: true } },
           },
         },
-        _count: { select: { repayments: true } },
+        _count: { select: { payments: { where: { status: "APPROVED" } } } },
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: MAX_ROWS + 1,
@@ -89,7 +89,7 @@ export async function buildReport(
       "Rejection reason",
       "Disbursed at (UTC)",
       "Disbursement ref",
-      "Installments paid",
+      "Approved payments",
     ];
     rows = items.slice(0, MAX_ROWS).map((a) => {
       const q = a.quote as unknown as QuoteSnapshot;
@@ -112,53 +112,55 @@ export async function buildReport(
         a.rejectionReason,
         iso(a.disbursedAt),
         a.disbursementRef,
-        a._count.repayments,
+        a._count.payments,
       ];
     });
     return finish(headers, rows, items.length);
   }
 
   if (type === "repayments") {
-    const items = await prisma.repayment.findMany({
-      where: createdAt ? { createdAt } : {},
+    // Only APPROVED payments are reported. Pending and rejected ones are not money received.
+    const items = await prisma.payment.findMany({
+      where: {
+        status: "APPROVED",
+        ...(createdAt ? { reviewedAt: createdAt } : {}),
+      },
       include: {
-        application: {
+        user: {
           select: {
-            user: {
-              select: {
-                mobileNumber: true,
-                kycProfile: { select: { fullName: true } },
-              },
-            },
+            mobileNumber: true,
+            kycProfile: { select: { fullName: true } },
           },
         },
       },
-      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      orderBy: [{ reviewedAt: "desc" }, { id: "desc" }],
       take: MAX_ROWS + 1,
     });
     headers = [
       "Payment ID",
-      "Paid at (UTC)",
+      "Submitted at (UTC)",
+      "Approved at (UTC)",
       "Application ID",
       "Borrower",
       "Mobile",
-      "Installment no.",
       "Amount (PHP)",
       "Method",
       "Reference",
+      "Approved by (user ID)",
     ];
     rows = items
       .slice(0, MAX_ROWS)
       .map((r) => [
         r.id,
         iso(r.createdAt),
+        iso(r.reviewedAt),
         r.applicationId,
-        r.application.user.kycProfile?.fullName ?? "",
-        localMobile(r.application.user.mobileNumber),
-        r.installmentNo,
+        r.user.kycProfile?.fullName ?? "",
+        localMobile(r.user.mobileNumber),
         r.amount.toFixed(2),
         r.method,
         r.reference,
+        r.reviewedById,
       ]);
     return finish(headers, rows, items.length);
   }

@@ -239,18 +239,18 @@ export async function submitApplication(
  * A borrower can retrieve only their own application.
  * Return 404 for missing applications or another user's ID.
  */
-export async function getMyApplication(userId: string, applicationId: string) {
-  const application = await prisma.loanApplication.findFirst({
-    where: {
-      id: applicationId,
-      userId,
-    },
-    include: { repayments: { orderBy: { installmentNo: "asc" } } },
-  });
+// export async function getMyApplication(userId: string, applicationId: string) {
+//   const application = await prisma.loanApplication.findFirst({
+//     where: {
+//       id: applicationId,
+//       userId,
+//     },
+//     include: { repayments: { orderBy: { installmentNo: "asc" } } },
+//   });
 
-  if (!application) {
-    throw ApiError.notFound("Application not found");
-  }
+//   if (!application) {
+//     throw ApiError.notFound("Application not found");
+//   }
 
-  return application;
-}
+//   return application;
+// }

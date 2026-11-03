@@ -17,4 +17,6 @@ export type View =
   | "kyc-queue"
   | "admin-loans"
   | "admin-pricing"
+  | "admin-payments"
+  | "admin-payment-setup"
   | "admin-reports";

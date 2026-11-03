@@ -17,6 +17,8 @@ import KycQueue from "./screens/KycQueue";
 import AdminLoans from "./screens/AdminLoans";
 import AdminPricing from "./screens/AdminPricing";
 import AdminReports from "./screens/AdminReports";
+import AdminPayments from "./screens/AdminPayments";
+import AdminPaymentSetup from "./screens/AdminPaymentSetup";
 
 const NAV: Record<Role, { view: View; label: string }[]> = {
   BORROWER: [
@@ -28,11 +30,14 @@ const NAV: Record<Role, { view: View; label: string }[]> = {
   REVIEWER: [
     { view: "home", label: "Home" },
     { view: "kyc-queue", label: "KYC queue" },
+    { view: "admin-payments", label: "Payments" },
   ],
   ADMIN: [
     { view: "home", label: "Home" },
     { view: "kyc-queue", label: "KYC queue" },
     { view: "admin-loans", label: "Loans" },
+    { view: "admin-payments", label: "Payments" },
+    { view: "admin-payment-setup", label: "Payment setup" },
     { view: "admin-pricing", label: "Pricing" },
     { view: "admin-reports", label: "Reports" },
   ],
@@ -179,6 +184,12 @@ export default function App() {
         )}
         {current === "kyc-queue" && <KycQueue token={session.token} />}
         {current === "admin-loans" && <AdminLoans token={session.token} />}
+        {current === "admin-payments" && (
+          <AdminPayments token={session.token} />
+        )}
+        {current === "admin-payment-setup" && (
+          <AdminPaymentSetup token={session.token} />
+        )}
         {current === "admin-pricing" && <AdminPricing token={session.token} />}
         {current === "admin-reports" && <AdminReports token={session.token} />}
       </main>

@@ -20,8 +20,8 @@ export const rate = z
   .string()
   .regex(/^\d{1,2}(\.\d{1,6})?$/, "Enter a monthly percentage, e.g. 1.00")
   .refine(
-    (value) => Number(value) <= 6,
-    "The demo supports rates up to 6% monthly"
+    (value) => Number(value) <= 25,
+    "The supports rates up to 25% monthly"
   );
 
 // Common calculation inputs.
@@ -52,7 +52,12 @@ export const calculatorSchema = requestSchema
 
 // Application pricing comes from the server.
 // Extra fields such as interest rate, fees or userId are rejected.
-export const paymentMethodSchema = z.enum(["GCASH", "MAYA", "INSTAPAY", "PESONET"]);
+export const paymentMethodSchema = z.enum([
+  "GCASH",
+  "MAYA",
+  "INSTAPAY",
+  "PESONET",
+]);
 
 export const applicationSchema = requestSchema
   .extend({
@@ -72,7 +77,11 @@ export const applicationSchema = requestSchema
       bankCode: v.disbursementBankCode,
     });
     if (!result.ok) {
-      ctx.addIssue({ code: "custom", path: ["disbursementAccount"], message: result.message });
+      ctx.addIssue({
+        code: "custom",
+        path: ["disbursementAccount"],
+        message: result.message,
+      });
       return z.NEVER;
     }
     return {
@@ -82,7 +91,55 @@ export const applicationSchema = requestSchema
     };
   });
 
-export const repaymentSchema = z.object({ method: paymentMethodSchema }).strict();
+// export const repaymentSchema = z
+//   .object({ method: paymentMethodSchema })
+//   .strict();
+
+// A borrower reporting a payment they made. It stays PENDING until staff approve it.
+export const submitPaymentSchema = z
+  .object({
+    method: z.enum(["GCASH_QR", "MAYA_QR", "BANK_TRANSFER", "CHEQUE"]),
+    amount: z
+      .string()
+      .regex(
+        /^\d{1,7}(\.\d{1,2})?$/,
+        "Enter the amount with at most two decimal places"
+      ),
+    reference: z
+      .string()
+      .trim()
+      .min(4, "Enter the reference or cheque number")
+      .max(40)
+      .regex(
+        /^[A-Za-z0-9][A-Za-z0-9 /-]*$/,
+        "Use letters, numbers, spaces, - or / only"
+      ),
+    note: z.string().trim().max(200).optional(),
+  })
+  .strict();
+
+export const reviewPaymentSchema = z
+  .object({
+    decision: z.enum(["APPROVED", "REJECTED"]),
+    reason: z.string().trim().min(3).max(300).optional(),
+  })
+  .strict()
+  .refine((v) => v.decision === "APPROVED" || !!v.reason, {
+    message: "A reason is required when rejecting",
+    path: ["reason"],
+  });
+
+export const receivingAccountSchema = z
+  .object({
+    accountName: z.string().trim().min(2).max(80),
+    accountNumber: z.string().trim().min(4).max(40),
+    bankName: z.string().trim().max(80).optional(),
+    instructions: z.string().trim().max(300).optional(),
+    active: z.boolean(),
+  })
+  .strict();
+
+export const chequeToggleSchema = z.object({ allowed: z.boolean() }).strict();
 
 export const reviewApplicationSchema = z
   .object({

@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { ApiError } from "../../utils/ApiError";
-import { LOAN_LIMITS } from "../../config/ph";
+import {
+  LOAN_LIMITS,
+  MAX_MONTHLY_RATE_PERCENT,
+  REGULATORY_REFERENCE,
+} from "../../config/ph";
 
 // Use decimal arithmetic instead of JavaScript floating-point money calculations.
 const Decimal = Prisma.Decimal.clone({
@@ -14,7 +18,7 @@ const money = (value: Prisma.Decimal.Value) =>
 const formatMoney = (value: Prisma.Decimal.Value) =>
   new Decimal(value).toFixed(2);
 
-export const ENGINE_VERSION = "demo-monthly-v2";
+export const ENGINE_VERSION = "demo-monthly-v3";
 
 export type QuoteInput = {
   principal: string;
@@ -131,7 +135,7 @@ export function calculateLoan(input: QuoteInput) {
     processingFee.lt(0) ||
     !monthlyRate.isFinite() ||
     monthlyRate.lt(0) ||
-    monthlyRate.gt("0.06") ||
+    monthlyRate.gt(new Decimal(MAX_MONTHLY_RATE_PERCENT).div(100)) ||
     !Number.isInteger(months) ||
     months < 1 ||
     months > 60
@@ -256,42 +260,63 @@ export function calculateLoan(input: QuoteInput) {
 
   const totalBorrowerCost = totalInterest.plus(deductions);
 
-  const coveredSmallLoan = principal.lte(10000) && months <= 4;
+  const coveredSmallLoan =
+    principal.lte(REGULATORY_REFERENCE.coveredPrincipalMax) &&
+    months <= REGULATORY_REFERENCE.coveredTermMonthsMax;
 
   /*
-   * Conservative demo checks.
-   * These do not certify that a product is legally compliant.
-   *
+   * SEC MC 14 s.2025 ceilings (6% nominal, 12% effective, 100% total cost)
+   * apply only to covered loans: PHP 10,000 or less and up to 4 months.
+   * All other loans may be priced up to MAX_MONTHLY_RATE_PERCENT (25%).
    * Compare using unrounded EIR, not its display value.
    */
   const checks = {
-    nominalWithinDemoLimit: ratePercent.lte(6),
+    nominalWithinDemoLimit: coveredSmallLoan
+      ? ratePercent.lte(REGULATORY_REFERENCE.nominalCapPercentPerMonth)
+      : ratePercent.lte(MAX_MONTHLY_RATE_PERCENT),
 
-    effectiveWithinDemoLimit: monthlyEir.lte(
-      new Decimal("0.12").plus("0.000000000001")
-    ),
+    effectiveWithinDemoLimit: coveredSmallLoan
+      ? monthlyEir.lte(new Decimal("0.12").plus("0.000000000001"))
+      : true,
 
-    costWithinDemoLimit: totalBorrowerCost.lte(principal),
+    costWithinDemoLimit: coveredSmallLoan
+      ? totalBorrowerCost.lte(principal)
+      : true,
   };
 
   // Everything the borrower must satisfy to apply; shown in the UI when not eligible.
   const ineligibleReasons: string[] = [];
   if (input.method !== "DIMINISHING")
-    ineligibleReasons.push("Flat-rate simulations are for comparison only and cannot be applied for");
-  if (principal.lt(LOAN_LIMITS.minPrincipal) || principal.gt(LOAN_LIMITS.maxPrincipal))
     ineligibleReasons.push(
-      `Loan amount must be between PHP ${LOAN_LIMITS.minPrincipal.toLocaleString("en-PH")} and PHP ${LOAN_LIMITS.maxPrincipal.toLocaleString("en-PH")}`
+      "Flat-rate simulations are for comparison only and cannot be applied for"
+    );
+  if (
+    principal.lt(LOAN_LIMITS.minPrincipal) ||
+    principal.gt(LOAN_LIMITS.maxPrincipal)
+  )
+    ineligibleReasons.push(
+      `Loan amount must be between PHP ${LOAN_LIMITS.minPrincipal.toLocaleString(
+        "en-PH"
+      )} and PHP ${LOAN_LIMITS.maxPrincipal.toLocaleString("en-PH")}`
     );
   if (months < LOAN_LIMITS.minTermMonths || months > LOAN_LIMITS.maxTermMonths)
     ineligibleReasons.push(
       `Term must be ${LOAN_LIMITS.minTermMonths} to ${LOAN_LIMITS.maxTermMonths} months`
     );
   if (!checks.nominalWithinDemoLimit)
-    ineligibleReasons.push("Monthly interest exceeds the 6% nominal ceiling");
+    ineligibleReasons.push(
+      coveredSmallLoan
+        ? "Loans of PHP 10,000 or less for up to 4 months are capped at 6% monthly (SEC MC 14 s.2025)"
+        : `Monthly interest exceeds the ${MAX_MONTHLY_RATE_PERCENT}% maximum`
+    );
   if (!checks.effectiveWithinDemoLimit)
-    ineligibleReasons.push("Effective interest rate (including fees) exceeds 12% per month");
+    ineligibleReasons.push(
+      "Effective interest rate (including fees) exceeds 12% per month for this small short loan"
+    );
   if (!checks.costWithinDemoLimit)
-    ineligibleReasons.push("Total borrowing cost exceeds 100% of the amount borrowed");
+    ineligibleReasons.push(
+      "Total borrowing cost exceeds 100% of the amount borrowed for this small short loan"
+    );
 
   return {
     demoOnly: true,
