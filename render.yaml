@@ -1,0 +1,65 @@
+# TEST deployment: one web service (API + React app on the same URL) and a free Postgres.
+# Free-tier limits: the service sleeps after 15 minutes idle (first request takes ~1 minute),
+# and the free database expires 30 days after creation with no backups.
+databases:
+  - name: ph-loan-db
+    databaseName: ph_loan
+    user: ph_loan_user
+    region: singapore # closest Render region to the Philippines
+    plan: free
+
+services:
+  - type: web
+    name: pesoloan
+    runtime: node
+    region: singapore
+    plan: free
+    # --include=dev: Render sets NODE_ENV=production, which would skip TypeScript, Vite and Tailwind.
+    buildCommand: >-
+      cd backend && npm ci --include=dev && npx prisma generate && npm run build
+      && cd ../frontend && npm ci --include=dev && npm run build
+    # Apply migrations, create/refresh staff accounts and default pricing, then boot.
+    startCommand: cd backend && npx prisma migrate deploy && npm run bootstrap && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ph-loan-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true # never change after real KYC data exists, or stored ID numbers become unreadable
+      - key: JWT_EXPIRES_IN
+        value: 1h
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: DEMO_LOANS_ENABLED
+        value: "true"
+      # Real SMS through Semaphore
+      - key: SMS_PROVIDER
+        value: semaphore
+      - key: ALLOW_MOCK_SMS
+        value: "false"
+      - key: SEMAPHORE_API_KEY
+        sync: false # Render asks for this when you create the Blueprint
+      - key: SEMAPHORE_SENDER_NAME
+        sync: false # a sender name that is ACTIVE in your Semaphore account
+      # KYC photos are stored in Postgres because free services have no persistent disk
+      - key: KYC_UPLOADS_ENABLED
+        value: "true"
+      - key: STORAGE_DRIVER
+        value: db
+      # Staff accounts, created on every deploy from these values
+      - key: ADMIN_MOBILE
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: REVIEWER_MOBILE
+        sync: false
+      - key: REVIEWER_PASSWORD
+        sync: false

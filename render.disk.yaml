@@ -1,0 +1,49 @@
+# OPTIONAL PAID WEB SERVICE + DISK. Database remains testing-only.
+databases:
+  - name: ph-loan-db
+    databaseName: ph_loan
+    user: ph_loan_user
+    region: singapore # closest Render region to the Philippines
+    plan: free # for testing only; see notes below
+
+services:
+  - type: web
+    name: ph-loan-api
+    runtime: node
+    region: singapore
+    plan: starter
+    disk:
+      name: kyc-data
+      mountPath: /var/data
+      sizeGB: 1
+    rootDir: backend
+    # --include=dev because Render sets NODE_ENV=production, which would skip TypeScript
+    buildCommand: npm ci --include=dev && npx prisma generate && npm run build
+    # Apply pending migrations, then boot
+    startCommand: npx prisma migrate deploy && npm start
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ph-loan-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true # Render creates a strong random value
+      - key: CORS_ORIGINS
+        sync: false # you set this in the dashboard to your frontend URL
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 1h
+      - key: ALLOW_MOCK_SMS
+        value: "false"
+      - key: KYC_UPLOADS_ENABLED
+        value: "true"
+      - key: KYC_STORAGE_PERSISTENT
+        value: "true"
+      - key: UPLOAD_DIR
+        value: /var/data/kyc

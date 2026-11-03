@@ -1,0 +1,189 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  BORROWER
+  REVIEWER
+  ADMIN
+}
+
+enum KycStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OtpPurpose {
+  SIGNUP
+  RESET
+}
+
+enum IdType {
+  PHILID // PhilSys National ID (PhilID / ePhilID)
+  UMID
+  DRIVERS_LICENSE
+  PASSPORT // legacy value, not offered in the UI
+  SSS
+  TIN
+  PRC
+}
+
+model User {
+  id               String                @id @default(uuid())
+  mobileNumber     String                @unique // normalized: +639XXXXXXXXX
+  email            String?               @unique
+  passwordHash     String
+  role             Role                  @default(BORROWER)
+  isMobileVerified Boolean               @default(false)
+  kycStatus        KycStatus             @default(NOT_SUBMITTED)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  otpCodes         OtpCode[]
+  kycProfile       KycProfile?
+  loanApplications LoanApplication[]
+  rateOverride     BorrowerRateOverride?
+}
+
+model OtpCode {
+  id         String     @id @default(uuid())
+  userId     String
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  purpose    OtpPurpose
+  expiresAt  DateTime
+  attempts   Int        @default(0)
+  consumedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  @@index([userId, purpose, createdAt])
+}
+
+model KycProfile {
+  id              String    @id @default(uuid())
+  userId          String    @unique
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fullName        String
+  birthDate       DateTime  @db.Date
+  address         String
+  idType          IdType
+  idNumberEnc     String
+  idNumberLast4   String
+  idImageKey      String
+  selfieImageKey  String
+  status          KycStatus @default(PENDING)
+  rejectionReason String?
+  reviewedById    String?
+  reviewedAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model LoanPricingPolicy {
+  id      String @id @default(uuid())
+  version Int    @unique @default(autoincrement())
+
+  monthlyRatePercent Decimal @db.Decimal(9, 6)
+  processingFee      Decimal @db.Decimal(14, 2)
+  dstPayer           String  @default("LENDER")
+
+  reason      String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  applications LoanApplication[]
+}
+
+model BorrowerRateOverride {
+  userId             String   @id
+  user               User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  monthlyRatePercent Decimal  @db.Decimal(9, 6)
+  reason             String
+  updatedById        String
+  updatedAt          DateTime @updatedAt
+}
+
+model LoanApplication {
+  id String @id @default(uuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  policyId String
+  policy   LoanPricingPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+
+  requestKey  String
+  requestHash String
+
+  principal          Decimal @db.Decimal(14, 2)
+  termMonths         Int
+  monthlyRatePercent Decimal @db.Decimal(9, 6)
+  rateSource         String
+
+  // SUBMITTED -> APPROVED | REJECTED -> DISBURSED -> REPAID
+  status    String   @default("SUBMITTED")
+  demoOnly  Boolean  @default(true)
+  quote     Json
+  createdAt DateTime @default(now())
+
+  // Where the borrower wants the money sent: GCASH | MAYA | INSTAPAY | PESONET
+  disbursementMethod   String  @default("GCASH")
+  disbursementAccount  String  @default("")
+  disbursementBankCode String?
+
+  reviewedById    String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  disbursedAt     DateTime?
+  disbursementRef String?
+
+  repayments Repayment[]
+
+  @@unique([userId, requestKey])
+  @@index([userId, createdAt])
+}
+
+model LoanPricingAudit {
+  id String @id @default(uuid())
+
+  actorId      String
+  targetUserId String?
+  action       String
+
+  before Json?
+  after  Json
+  reason String
+
+  createdAt DateTime @default(now())
+}
+
+model Repayment {
+  id String @id @default(uuid())
+
+  applicationId String
+  application   LoanApplication @relation(fields: [applicationId], references: [id], onDelete: Restrict)
+
+  userId        String
+  installmentNo Int
+  amount        Decimal  @db.Decimal(14, 2)
+  method        String
+  reference     String
+  createdAt     DateTime @default(now())
+
+  // One payment per installment: double-submits cannot double-charge.
+  @@unique([applicationId, installmentNo])
+  @@index([userId, createdAt])
+}
+
+/// KYC photos when STORAGE_DRIVER=db (hosts without a persistent disk, e.g. Render free tier).
+model StoredFile {
+  key       String   @id
+  data      Bytes
+  createdAt DateTime @default(now())
+}
