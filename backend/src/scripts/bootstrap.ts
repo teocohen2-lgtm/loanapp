@@ -9,6 +9,9 @@ import { normalizePhMobile } from "../utils/phone";
  *
  *   ADMIN_MOBILE / ADMIN_PASSWORD         (optional pair)
  *   REVIEWER_MOBILE / REVIEWER_PASSWORD   (optional pair)
+ *  BORROWER_MOBILE / BORROWER_PASSWORD   (optional pair; also BORROWER2_*, BORROWER3_* ... up to 5)
+ *                                         Verified borrower accounts for use while SMS is not active.
+ *                                         They still complete KYC and need reviewer approval.
  *
  * The environment is the source of truth: changing a password there and redeploying resets it.
  */
@@ -16,7 +19,7 @@ async function upsertStaff(
   label: string,
   mobileRaw: string | undefined,
   password: string | undefined,
-  role: "ADMIN" | "REVIEWER"
+  role: "ADMIN" | "REVIEWER" | "BORROWER"
 ): Promise<string | null> {
   if (!mobileRaw && !password) return null;
   const mobile = mobileRaw ? normalizePhMobile(mobileRaw) : null;
@@ -40,7 +43,13 @@ async function upsertStaff(
       role,
       isMobileVerified: true,
     },
-    update: { passwordHash, role, isMobileVerified: true },
+    // update: { passwordHash, role, isMobileVerified: true },
+
+    // Never change the role of an existing account when seeding a borrower.
+    update:
+      role === "BORROWER"
+        ? { passwordHash, isMobileVerified: true }
+        : { passwordHash, role, isMobileVerified: true },
   });
   console.log(`${label} account ready (${mobile}).`);
   return user.id;
@@ -60,6 +69,16 @@ async function main() {
     env.REVIEWER_PASSWORD,
     "REVIEWER"
   );
+
+  for (let n = 1; n <= 5; n++) {
+    const prefix = n === 1 ? "BORROWER" : `BORROWER${n}`;
+    await upsertStaff(
+      `Borrower ${n}`,
+      env[`${prefix}_MOBILE`],
+      env[`${prefix}_PASSWORD`],
+      "BORROWER"
+    );
+  }
 
   const hasPolicy = await prisma.loanPricingPolicy.findFirst();
   if (hasPolicy) return;

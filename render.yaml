@@ -63,3 +63,7 @@ services:
         sync: false
       - key: REVIEWER_PASSWORD
         sync: false
+      - key: BORROWER_MOBILE
+        sync: false
+      - key: BORROWER_PASSWORD
+        sync: false
