@@ -1,9 +1,50 @@
 @import "tailwindcss";
 
+/*
+ * PesoLoan design tokens.
+ * brand = tropical teal (trust), mango = the one accent (use sparingly), slate = ink-tinted greys.
+ */
+@theme {
+  --font-sans: "Figtree Variable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --font-display: "Bricolage Grotesque Variable", "Figtree Variable",
+    ui-sans-serif, system-ui, sans-serif;
+
+  --color-brand-50: #eef7f5;
+  --color-brand-100: #d6ede8;
+  --color-brand-200: #b0dbd2;
+  --color-brand-300: #7fc2b6;
+  --color-brand-400: #4ba295;
+  --color-brand-500: #2a8579;
+  --color-brand-600: #1d6c63;
+  --color-brand-700: #165a53;
+  --color-brand-800: #104b46;
+  --color-brand-900: #0b3f3b;
+  --color-brand-950: #072a28;
+
+  --color-mango-100: #fdefc9;
+  --color-mango-300: #f8d47c;
+  --color-mango-400: #f4b63f;
+  --color-mango-500: #e39b14;
+
+  --color-surface: #f2f6f5;
+
+  --color-slate-50: #f5f8f7;
+  --color-slate-100: #e9efed;
+  --color-slate-200: #d8e1de;
+  --color-slate-300: #bcc9c5;
+  --color-slate-400: #8fa19c;
+  --color-slate-500: #667a75;
+  --color-slate-600: #4c605b;
+  --color-slate-700: #374845;
+  --color-slate-800: #22332f;
+  --color-slate-900: #10231f;
+}
+
 :root {
-  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
-  color: #172b27;
-  background: #f5f7f4;
+  font-family: var(--font-sans);
+  color: var(--color-slate-900);
+  background: var(--color-surface);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
@@ -15,19 +56,110 @@ body {
   min-height: 100vh;
 }
 
-button,
-input {
-  font: inherit;
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
 }
 
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
 button {
   cursor: pointer;
 }
-
 button:disabled {
   cursor: not-allowed;
 }
 
+/* Money lines up in columns and never jumps while typing. */
+.money {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
 ::selection {
-  background: #b9ead5;
+  background: var(--color-mango-300);
+}
+
+:focus-visible {
+  outline: 3px solid var(--color-mango-400);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---- Resibo: the receipt look used for quotes, balances and payments ---- */
+.resibo-edge {
+  height: 10px;
+  background: #fff;
+  -webkit-mask: conic-gradient(
+      from -45deg at bottom,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    50% / 20px 100%;
+  mask: conic-gradient(
+      from -45deg at bottom,
+      #0000,
+      #000 1deg 89deg,
+      #0000 90deg
+    )
+    50% / 20px 100%;
+}
+.resibo-dash {
+  border-top: 2px dashed var(--color-slate-200);
+}
+
+/* One entrance moment: the sample receipt "prints" once on the landing screen. */
+@keyframes resibo-print {
+  from {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-8px);
+  }
+  to {
+    clip-path: inset(0 0 -12px 0);
+    transform: none;
+  }
+}
+.resibo-print {
+  animation: resibo-print 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) 0.15s both;
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-slate-100) 25%,
+    var(--color-slate-50) 50%,
+    var(--color-slate-100) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 8px;
+}
+
+/* Space for the mobile bottom tab bar and phone home indicator. */
+.safe-bottom {
+  padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .resibo-print,
+  .skeleton {
+    animation: none;
+  }
+  * {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+  }
 }

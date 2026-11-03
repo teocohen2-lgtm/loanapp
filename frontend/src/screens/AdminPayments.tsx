@@ -9,7 +9,16 @@ import {
 import { displayMobile, formatDate, formatPeso } from "../lib/format";
 import { inputCls } from "../lib/styles";
 import { useResource } from "../lib/useResource";
-import { Alert, Button, Empty, Loading, StatusBadge } from "../components/ui";
+// import { Alert, Button, Empty, Loading, StatusBadge } from "../components/ui";
+import {
+  Alert,
+  Button,
+  Chips,
+  Empty,
+  Loading,
+  PageHeader,
+  StatusBadge,
+} from "../components/ui";
 
 const TABS: { label: string; value: PaymentStatus }[] = [
   { label: "Waiting for approval", value: "PENDING" },
@@ -31,16 +40,12 @@ export default function AdminPayments({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Payments</h1>
-        <p className="mt-2 text-slate-500">
-          Check your GCash, Maya or bank account for each payment. Approve only
-          if the money arrived. Approved payments count in balances and reports.
-          Rejected ones tell the borrower to pay again.
-        </p>
-      </div>
+      <PageHeader
+        title="Payments"
+        subtitle="Check your GCash, Maya or bank account for each payment. Approve it only if the money arrived. Rejected payments tell the borrower to pay again."
+      />
 
-      <div className="flex flex-wrap gap-2">
+      {/* <div className="flex flex-wrap gap-2">
         {TABS.map((t) => (
           <button
             key={t.value}
@@ -51,14 +56,22 @@ export default function AdminPayments({ token }: { token: string }) {
             aria-pressed={tab === t.value}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${
               tab === t.value
-                ? "border-emerald-900 bg-emerald-900 text-white"
+                ? "border-brand-900 bg-brand-900 text-white"
                 : "border-slate-300 bg-white hover:bg-slate-50"
             }`}
           >
             {t.label}
           </button>
         ))}
-      </div>
+      </div> */}
+      <Chips
+        options={TABS}
+        value={tab}
+        onChange={(v) => {
+          setTab(v);
+          setNotice("");
+        }}
+      />
 
       {notice && <Alert kind="success">{notice}</Alert>}
 
@@ -136,7 +149,7 @@ function PaymentRow({
         <StatusBadge status={p.status} />
       </div>
 
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+      <dl className="mt-4 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <Cell label="Method" value={METHOD[p.method] ?? p.method} />
         <Cell label="Reference" value={p.reference} />
         <Cell label="Submitted" value={formatDate(p.createdAt)} />
@@ -173,7 +186,7 @@ function PaymentRow({
               className={inputCls}
             />
           )}
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-2 gap-3 sm:flex">
             <Button disabled={busy} onClick={() => void act("APPROVED")}>
               Received. Approve
             </Button>
@@ -204,7 +217,7 @@ function PaymentRow({
 function Cell({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase text-slate-500">{label}</dt>
+      <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="mt-0.5 break-words font-semibold">{value}</dd>
     </div>
   );

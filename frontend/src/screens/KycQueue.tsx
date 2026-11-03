@@ -46,7 +46,7 @@ export default function KycQueue({ token }: { token: string }) {
                     }}
                     className={`w-full rounded-xl border p-3 text-left text-sm ${
                       selected === i.userId
-                        ? "border-emerald-700 bg-emerald-50"
+                        ? "border-brand-700 bg-brand-50"
                         : "border-slate-200 hover:bg-slate-50"
                     }`}
                   >
@@ -230,7 +230,7 @@ function Item({
 }) {
   return (
     <div>
-      <dt className="text-xs uppercase text-slate-500">{label}</dt>
+      <dt className="text-xs text-slate-500">{label}</dt>
       <dd className={`mt-0.5 font-semibold ${mono ? "font-mono" : ""}`}>
         {value}
       </dd>
@@ -249,7 +249,7 @@ function Photo({
 }) {
   return (
     <figure className="rounded-xl bg-slate-50 p-3">
-      <figcaption className="mb-2 text-xs font-medium uppercase text-slate-500">
+      <figcaption className="mb-2 text-xs font-medium text-slate-500">
         {title}
       </figcaption>
       {src ? (

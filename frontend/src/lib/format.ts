@@ -1,4 +1,7 @@
-const peso = new Intl.NumberFormat("en-PH", { style: "currency", currency: "PHP" });
+const peso = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+});
 
 /** "5000" -> "₱5,000.00" */
 export function formatPeso(value: string | number): string {
@@ -6,12 +9,29 @@ export function formatPeso(value: string | number): string {
   return Number.isFinite(n) ? peso.format(n) : "—";
 }
 
+const pesoWhole = new Intl.NumberFormat("en-PH", {
+  style: "currency",
+  currency: "PHP",
+  maximumFractionDigits: 0,
+});
+
+/** "5000" -> "₱5,000" (limits and shortcuts, where centavos add noise) */
+export function formatPesoWhole(value: string | number): string {
+  const n = Number(value);
+  return Number.isFinite(n) ? pesoWhole.format(n) : "—";
+}
+
 /** "2026-11-03" or ISO timestamp -> "Nov 3, 2026" */
 export function formatDate(value: string): string {
   const d = new Date(value.length === 10 ? `${value}T00:00:00` : value);
   return Number.isNaN(d.getTime())
     ? value
-    : d.toLocaleDateString("en-PH", { year: "numeric", month: "short", day: "numeric", timeZone: value.length === 10 ? undefined : "Asia/Manila" });
+    : d.toLocaleDateString("en-PH", {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        timeZone: value.length === 10 ? undefined : "Asia/Manila",
+      });
 }
 
 /** "+639171234567" -> "0917 123 4567" */

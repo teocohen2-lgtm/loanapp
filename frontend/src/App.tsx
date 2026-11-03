@@ -19,27 +19,31 @@ import AdminPricing from "./screens/AdminPricing";
 import AdminReports from "./screens/AdminReports";
 import AdminPayments from "./screens/AdminPayments";
 import AdminPaymentSetup from "./screens/AdminPaymentSetup";
+import { Icon, Logo, type IconName } from "./components/ui";
+import { displayMobile } from "./lib/format";
 
-const NAV: Record<Role, { view: View; label: string }[]> = {
+type NavItem = { view: View; label: string; icon: IconName };
+
+const NAV: Record<Role, NavItem[]> = {
   BORROWER: [
-    { view: "home", label: "Home" },
-    { view: "apply", label: "Apply" },
-    { view: "loans", label: "My loans" },
-    { view: "kyc", label: "Verification" },
+    { view: "home", label: "Home", icon: "home" },
+    { view: "apply", label: "Apply", icon: "plus" },
+    { view: "loans", label: "My loans", icon: "loans" },
+    { view: "kyc", label: "Verify ID", icon: "shield" },
   ],
   REVIEWER: [
-    { view: "home", label: "Home" },
-    { view: "kyc-queue", label: "KYC queue" },
-    { view: "admin-payments", label: "Payments" },
+    { view: "home", label: "Home", icon: "home" },
+    { view: "kyc-queue", label: "ID checks", icon: "shield" },
+    { view: "admin-payments", label: "Payments", icon: "wallet" },
   ],
   ADMIN: [
-    { view: "home", label: "Home" },
-    { view: "kyc-queue", label: "KYC queue" },
-    { view: "admin-loans", label: "Loans" },
-    { view: "admin-payments", label: "Payments" },
-    { view: "admin-payment-setup", label: "Payment setup" },
-    { view: "admin-pricing", label: "Pricing" },
-    { view: "admin-reports", label: "Reports" },
+    { view: "home", label: "Home", icon: "home" },
+    { view: "kyc-queue", label: "ID checks", icon: "shield" },
+    { view: "admin-loans", label: "Loans", icon: "loans" },
+    { view: "admin-payments", label: "Payments", icon: "wallet" },
+    { view: "admin-payment-setup", label: "Payment setup", icon: "bank" },
+    { view: "admin-pricing", label: "Pricing", icon: "percent" },
+    { view: "admin-reports", label: "Reports", icon: "chart" },
   ],
 };
 
@@ -99,7 +103,7 @@ export default function App() {
   const { user } = session;
   const roleLabel = {
     BORROWER: "Borrower",
-    REVIEWER: "KYC reviewer",
+    REVIEWER: "Reviewer",
     ADMIN: "Administrator",
   }[user.role];
 
@@ -116,30 +120,33 @@ export default function App() {
   const current: View = allowed ? view : "home";
   const activeNav = current === "loan" ? "loans" : current;
 
-  return (
-    <div className="min-h-screen bg-[#f5f7f4]">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-6 py-4">
-          <div className="flex items-center gap-3">
-            <span className="grid size-10 place-items-center rounded-xl bg-emerald-900 text-xl font-bold text-white">
-              ₱
-            </span>
-            <span className="text-xl font-bold">PesoLoan</span>
-            <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">
-              Demo
-            </span>
-          </div>
+  const isBorrower = user.role === "BORROWER";
+  const items = NAV[user.role];
 
-          <nav className="flex flex-wrap items-center gap-1" aria-label="Main">
-            {NAV[user.role].map((n) => (
+  return (
+    <div className="min-h-screen bg-surface">
+      <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/90 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-3 px-4 py-3 sm:px-6">
+          <button
+            type="button"
+            onClick={() => go("home")}
+            aria-label="QuickLoan home"
+            className="flex items-center gap-2"
+          >
+            <Logo />
+          </button>
+
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Main">
+            {items.map((n) => (
               <button
                 key={n.view}
+                type="button"
                 onClick={() => go(n.view)}
                 aria-current={activeNav === n.view ? "page" : undefined}
-                className={`rounded-lg px-3 py-2 text-sm font-semibold ${
+                className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
                   activeNav === n.view
-                    ? "bg-emerald-50 text-emerald-900"
-                    : "text-slate-600 hover:bg-slate-50"
+                    ? "bg-brand-900 text-white"
+                    : "text-slate-600 hover:bg-slate-100"
                 }`}
               >
                 {n.label}
@@ -147,22 +154,54 @@ export default function App() {
             ))}
           </nav>
 
-          <div className="flex items-center gap-3">
-            <span className="hidden text-sm text-slate-500 sm:inline">
-              {roleLabel}
+          <div className="flex items-center gap-2">
+            <span className="hidden text-right leading-tight sm:block">
+              <span className="block text-sm font-semibold">
+                {displayMobile(user.mobileNumber)}
+              </span>
+              <span className="block text-xs text-slate-500">{roleLabel}</span>
             </span>
             <button
               type="button"
               onClick={() => setSession(null)}
-              className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold hover:bg-slate-50"
+              aria-label="Sign out"
+              className="grid size-10 place-items-center rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-100"
             >
-              Sign out
+              <Icon name="logout" />
             </button>
           </div>
         </div>
+
+        {/* Staff have many sections: a swipeable row on phones. Borrowers get the bottom tab bar instead. */}
+        {!isBorrower && (
+          <nav
+            className="flex gap-1 overflow-x-auto border-t border-slate-100 px-3 py-2 md:hidden"
+            aria-label="Sections"
+          >
+            {items.map((n) => (
+              <button
+                key={n.view}
+                type="button"
+                onClick={() => go(n.view)}
+                aria-current={activeNav === n.view ? "page" : undefined}
+                className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-semibold ${
+                  activeNav === n.view
+                    ? "bg-brand-900 text-white"
+                    : "bg-slate-100 text-slate-700"
+                }`}
+              >
+                {n.label}
+              </button>
+            ))}
+          </nav>
+        )}
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-10">
+      <main
+        className={`mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10 ${
+          isBorrower ? "pb-28 md:pb-10" : ""
+        }`}
+      >
         {current === "home" && (
           <Dashboard token={session.token} user={user} go={go} />
         )}
@@ -194,10 +233,48 @@ export default function App() {
         {current === "admin-reports" && <AdminReports token={session.token} />}
       </main>
 
-      <footer className="mx-auto max-w-6xl px-6 pb-10 text-xs text-slate-400">
-        Demo environment. No real funds are released and no real SMS, GCash,
-        Maya, InstaPay or PESONet calls are made.
+      <footer className="mx-auto max-w-6xl px-4 pb-28 text-xs text-slate-400 sm:px-6 md:pb-10">
+        Demo environment. No real funds are released and no real GCash, Maya,
+        InstaPay or PESONet payouts are made.
       </footer>
+
+      {isBorrower && (
+        <nav
+          className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden"
+          aria-label="Main"
+        >
+          <ul className="mx-auto grid max-w-md grid-cols-4">
+            {items.map((n) => {
+              const on = activeNav === n.view;
+              return (
+                <li key={n.view}>
+                  <button
+                    type="button"
+                    onClick={() => go(n.view)}
+                    aria-current={on ? "page" : undefined}
+                    className="flex w-full flex-col items-center gap-1 px-1 pb-1 pt-2.5"
+                  >
+                    <span
+                      className={`grid h-8 w-14 place-items-center rounded-full transition ${
+                        on ? "bg-brand-900 text-white" : "text-slate-500"
+                      }`}
+                    >
+                      <Icon name={n.icon} className="size-5" />
+                    </span>
+                    <span
+                      className={`text-xs font-semibold ${
+                        on ? "text-brand-900" : "text-slate-500"
+                      }`}
+                    >
+                      {n.label}
+                    </span>
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        </nav>
+      )}
     </div>
   );
 }

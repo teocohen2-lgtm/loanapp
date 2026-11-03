@@ -72,7 +72,7 @@ export async function sendOtpSms(to: string, code: string): Promise<void> {
     await semaphorePost("otp", {
       number: localMobile(to),
       message:
-        "Your PesoLoan verification code is {otp}. Valid for 5 minutes. Never share it with anyone.",
+        "Your QuickLoan verification code is {otp}. Valid for 5 minutes. Never share it with anyone.",
       code,
       ...(env.SEMAPHORE_SENDER_NAME
         ? { sendername: env.SEMAPHORE_SENDER_NAME }

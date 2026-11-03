@@ -256,7 +256,7 @@ function AccountForm({
           <label
             className={`text-sm font-semibold ${
               existing
-                ? "cursor-pointer text-emerald-800 hover:underline"
+                ? "cursor-pointer text-brand-800 hover:underline"
                 : "text-slate-400"
             }`}
           >

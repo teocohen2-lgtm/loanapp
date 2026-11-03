@@ -169,11 +169,11 @@ export default function KycScreen({ token, onChanged }: { token: string; onChang
           </Field>
           <Field label="Photo of the ID (front)" htmlFor="idImage" hint="JPEG or PNG, up to 5 MB">
             <input id="idImage" type="file" accept="image/jpeg,image/png" required onChange={pick(setIdImage)}
-              disabled={busy} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-900 file:px-4 file:py-2 file:text-white" />
+              disabled={busy} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-900 file:px-4 file:py-2 file:text-white" />
           </Field>
           <Field label="Selfie holding the same ID" htmlFor="selfie" hint="JPEG or PNG, up to 5 MB">
             <input id="selfie" type="file" accept="image/jpeg,image/png" required onChange={pick(setSelfie)}
-              disabled={busy} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-emerald-900 file:px-4 file:py-2 file:text-white" />
+              disabled={busy} className="block w-full text-sm file:mr-3 file:rounded-lg file:border-0 file:bg-brand-900 file:px-4 file:py-2 file:text-white" />
           </Field>
           <div className="space-y-4 md:col-span-2">
             {error && <Alert>{error}</Alert>}

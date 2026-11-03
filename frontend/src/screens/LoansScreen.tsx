@@ -24,8 +24,12 @@ import {
   Card,
   Empty,
   Field,
+  Icon,
   Loading,
-  Stat,
+  PageHeader,
+  ProgressBar,
+  Resibo,
+  ResiboRow,
   StatusBadge,
 } from "../components/ui";
 import type { View } from "../lib/view";
@@ -64,57 +68,75 @@ export function LoansList({
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-3xl font-bold">My loans</h1>
-        <Button onClick={() => go("apply")}>New application</Button>
-      </div>
+      <PageHeader
+        title="My loans"
+        subtitle="Every application and what you still owe."
+        action={<Button onClick={() => go("apply")}>New application</Button>}
+      />
 
       {loans.loading ? (
         <Loading />
       ) : loans.error ? (
         <Alert>{loans.error}</Alert>
       ) : (loans.data?.items ?? []).length === 0 ? (
-        <Empty>You have no loan applications yet.</Empty>
+        <Empty
+          icon="plus"
+          title="No loans yet"
+          action={<Button onClick={() => go("apply")}>Apply for a loan</Button>}
+        >
+          Your applications will show here with their progress.
+        </Empty>
       ) : (
-        <div className="grid gap-4">
+        <ul className="grid gap-3 md:grid-cols-2">
           {loans.data!.items.map((l) => (
-            <button
-              key={l.id}
-              onClick={() => go("loan", l.id)}
-              className="rounded-2xl border border-slate-200 bg-white p-5 text-left hover:border-emerald-600"
-            >
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xl font-bold">{formatPeso(l.principal)}</p>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {l.termMonths} month{l.termMonths === 1 ? "" : "s"} ·
-                    applied {formatDate(l.createdAt)}
-                  </p>
-                </div>
-                <div className="text-right">
+            <li key={l.id}>
+              <button
+                type="button"
+                onClick={() => go("loan", l.id)}
+                className="w-full rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-brand-500 hover:shadow-md"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="money font-display text-2xl font-bold">
+                      {formatPeso(l.principal)}
+                    </p>
+                    <p className="mt-0.5 text-sm text-slate-500">
+                      {l.termMonths} month{l.termMonths === 1 ? "" : "s"} ·
+                      applied {formatDate(l.createdAt)}
+                    </p>
+                  </div>
                   <StatusBadge status={l.status} />
-                  {l.summary &&
-                    (l.status === "DISBURSED" || l.status === "REPAID") && (
-                      <p className="mt-2 text-xs text-slate-500">
-                        {l.summary.paidInstallments} of {l.termMonths} paid ·{" "}
-                        {formatPeso(l.summary.remaining)} left
-                      </p>
-                    )}
-                  {l.summary && l.summary.pendingCount > 0 && (
-                    <p className="mt-1 text-xs font-semibold text-amber-800">
-                      {formatPeso(l.summary.pendingAmount)} waiting for approval
-                    </p>
-                  )}
-                  {l.summary && l.summary.rejectedNeedingAction.length > 0 && (
-                    <p className="mt-1 text-xs font-semibold text-red-700">
-                      Payment not received. Please pay again.
-                    </p>
-                  )}
                 </div>
-              </div>
-            </button>
+                {l.summary &&
+                  (l.status === "DISBURSED" || l.status === "REPAID") && (
+                    <div className="mt-4 space-y-2">
+                      <ProgressBar
+                        value={Number(l.summary.approvedPaid)}
+                        max={Number(l.summary.totalDue)}
+                        label="Loan paid"
+                      />
+                      <p className="money flex justify-between text-sm text-slate-600">
+                        <span>
+                          {l.summary.paidInstallments} of {l.termMonths} paid
+                        </span>
+                        <span>{formatPeso(l.summary.remaining)} left</span>
+                      </p>
+                    </div>
+                  )}
+                {l.summary && l.summary.pendingCount > 0 && (
+                  <p className="mt-3 text-sm font-semibold text-amber-800">
+                    {formatPeso(l.summary.pendingAmount)} waiting for approval
+                  </p>
+                )}
+                {l.summary && l.summary.rejectedNeedingAction.length > 0 && (
+                  <p className="mt-3 text-sm font-semibold text-red-700">
+                    Payment not received. Please pay again.
+                  </p>
+                )}
+              </button>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
@@ -147,16 +169,44 @@ export function LoanDetail({
   return (
     <div className="space-y-6">
       <button
+        type="button"
         onClick={() => go("loans")}
-        className="text-sm font-semibold text-emerald-800 hover:underline"
+        className="inline-flex items-center gap-1 text-sm font-semibold text-brand-800 hover:underline"
       >
-        ← All loans
+        <Icon name="chevron" className="size-4 rotate-180" /> All loans
       </button>
 
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-3xl font-bold">{formatPeso(a.principal)}</h1>
-        <StatusBadge status={a.status} />
-      </div>
+      <section className="rounded-3xl bg-brand-900 p-6 text-white sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <p className="text-sm text-brand-100/80">Loan amount</p>
+            <p className="money font-display text-4xl font-bold sm:text-5xl">
+              {formatPeso(a.principal)}
+            </p>
+          </div>
+          <StatusBadge status={a.status} />
+        </div>
+        {(active || a.status === "REPAID") && (
+          <div className="mt-6 space-y-3">
+            <ProgressBar
+              onDark
+              value={Number(ledger.approvedPaid)}
+              max={Number(ledger.totalDue)}
+              label="Loan paid"
+            />
+            <p className="money flex flex-wrap justify-between gap-2 text-sm text-brand-100">
+              <span>
+                {formatPeso(ledger.approvedPaid)} paid of{" "}
+                {formatPeso(ledger.totalDue)}
+              </span>
+              <span className="font-semibold text-white">
+                {formatPeso(ledger.remaining)} left · {ledger.paidInstallments}{" "}
+                of {a.termMonths} months paid
+              </span>
+            </p>
+          </div>
+        )}
+      </section>
 
       {a.status === "REJECTED" && (
         <Alert>
@@ -199,36 +249,10 @@ export function LoanDetail({
       )}
       {active && ledger.overdueCount > 0 && (
         <Alert kind="warning">
-          You have {ledger.overdueCount} overdue installment
+          You have {ledger.overdueCount} overdue payment
           {ledger.overdueCount === 1 ? "" : "s"}. Please pay as soon as you can.
         </Alert>
       )}
-
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Stat
-          label="You received"
-          value={formatPeso(q.netProceeds)}
-          sub={`after ${formatPeso(q.deductions)} fees`}
-        />
-        <Stat
-          label="Interest rate"
-          value={`${percent(a.monthlyRatePercent)} / month`}
-        />
-        <Stat
-          label="Paid (approved)"
-          value={formatPeso(ledger.approvedPaid)}
-          sub={`of ${formatPeso(ledger.totalDue)}`}
-        />
-        <Stat
-          label="Remaining"
-          value={formatPeso(ledger.remaining)}
-          sub={`${ledger.paidInstallments} of ${a.termMonths} installments paid`}
-        />
-      </div>
-
-      <p className="text-sm text-slate-500">
-        Payout: {describePayout(a, meta.data)}
-      </p>
 
       {active && ledger.availableToSubmit !== "0.00" && (
         <PayPanel
@@ -243,12 +267,51 @@ export function LoanDetail({
       )}
       {notice && <Alert kind="success">{notice}</Alert>}
 
-      <Card title="Repayment schedule">
-        <StatementTable
-          installments={ledger.installments}
-          schedule={q.schedule}
-        />
-      </Card>
+      <div className="grid items-start gap-6 lg:grid-cols-5">
+        <Resibo title="Loan receipt" className="lg:col-span-2">
+          <ResiboRow label="Loan amount" value={formatPeso(a.principal)} />
+          <ResiboRow
+            label="Fees taken out"
+            value={`−${formatPeso(q.deductions)}`}
+            muted
+          />
+          <ResiboRow
+            label="You received"
+            value={formatPeso(q.netProceeds)}
+            strong
+            divider
+          />
+          <ResiboRow
+            label="Interest rate"
+            value={`${percent(a.monthlyRatePercent)} a month`}
+          />
+          <ResiboRow
+            label="Total interest"
+            value={formatPeso(q.totalInterest)}
+            muted
+          />
+          <ResiboRow
+            label="Total to pay back"
+            value={formatPeso(q.totalRepayment)}
+            strong
+            divider
+          />
+          <ResiboRow
+            label="Money sent to"
+            value={describePayout(a, meta.data)}
+            muted
+          />
+        </Resibo>
+
+        <div className="lg:col-span-3">
+          <Card title="Month by month">
+            <StatementTable
+              installments={ledger.installments}
+              schedule={q.schedule}
+            />
+          </Card>
+        </div>
+      </div>
 
       {payments.length > 0 && (
         <Card title="Payment history">
@@ -312,63 +375,60 @@ function StatementTable({
   }[];
 }) {
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
-        <thead className="text-xs uppercase text-slate-500">
-          <tr>
-            <th className="py-2 pr-3">#</th>
-            <th className="py-2 pr-3">Due</th>
-            <th className="py-2 pr-3 text-right">Amount due</th>
-            <th className="py-2 pr-3 text-right">Paid</th>
-            <th className="py-2 pr-3 text-right">Left</th>
-            <th className="py-2 text-right">Status</th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-slate-100">
-          {installments.map((i) => {
-            const row = schedule.find((s) => s.installment === i.installment);
-            return (
-              <tr
-                key={i.installment}
-                className={i.status === "PAID" ? "text-slate-400" : ""}
+    <ol className="relative space-y-0">
+      {installments.map((i, index) => {
+        const row = schedule.find((s) => s.installment === i.installment);
+        const state =
+          i.status === "PAID" ? "PAID" : i.overdue ? "OVERDUE" : i.status;
+        const dot =
+          state === "PAID"
+            ? "bg-brand-600 text-white"
+            : state === "OVERDUE"
+            ? "bg-red-600 text-white"
+            : state === "PARTIAL"
+            ? "bg-mango-400 text-brand-950"
+            : "border-2 border-slate-300 bg-white text-slate-500";
+        return (
+          <li key={i.installment} className="flex gap-4">
+            <div className="flex flex-col items-center">
+              <span
+                className={`grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold ${dot}`}
               >
-                <td className="py-2 pr-3">{i.installment}</td>
-                <td className="py-2 pr-3 whitespace-nowrap">
-                  {formatDate(i.dueDate)}
-                </td>
-                <td
-                  className="py-2 pr-3 text-right"
-                  title={
-                    row
-                      ? `Principal ${formatPeso(
-                          row.principal
-                        )} + interest ${formatPeso(row.interest)}`
-                      : undefined
-                  }
-                >
-                  {formatPeso(i.amountDue)}
-                </td>
-                <td className="py-2 pr-3 text-right">{formatPeso(i.paid)}</td>
-                <td className="py-2 pr-3 text-right font-semibold">
-                  {formatPeso(i.remaining)}
-                </td>
-                <td className="py-2 text-right">
-                  <StatusBadge
-                    status={
-                      i.status === "PAID"
-                        ? "PAID"
-                        : i.overdue
-                        ? "OVERDUE"
-                        : i.status
-                    }
-                  />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                {state === "PAID" ? (
+                  <Icon name="check" className="size-4" />
+                ) : (
+                  i.installment
+                )}
+              </span>
+              {index < installments.length - 1 && (
+                <span className="my-1 w-0.5 flex-1 bg-slate-200" />
+              )}
+            </div>
+            <div className="min-w-0 flex-1 pb-5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="font-semibold">{formatDate(i.dueDate)}</p>
+                <StatusBadge status={state} />
+              </div>
+              <p className="money mt-0.5 text-sm text-slate-600">
+                {formatPeso(i.amountDue)} due
+                {Number(i.paid) > 0 &&
+                  i.status !== "PAID" &&
+                  ` · ${formatPeso(i.paid)} paid · ${formatPeso(
+                    i.remaining
+                  )} left`}
+                {i.status === "PAID" && " · paid in full"}
+              </p>
+              {row && (
+                <p className="money text-xs text-slate-500">
+                  Principal {formatPeso(row.principal)} + interest{" "}
+                  {formatPeso(row.interest)}
+                </p>
+              )}
+            </div>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 
@@ -397,6 +457,7 @@ function QrImage({ token, kind }: { token: string; kind: "GCASH" | "MAYA" }) {
       src={url}
       alt={`${kind === "GCASH" ? "GCash" : "Maya"} QR code`}
       className="mx-auto mt-3 w-56 rounded-xl border border-slate-200"
+      onError={() => setUrl(null)}
     />
   );
 }
@@ -480,23 +541,41 @@ function PayPanel({
               than {formatPeso(ledger.availableToSubmit)} right now.
             </p>
           )}
-          <Field label="Pay with" htmlFor="payWith">
-            <select
-              id="payWith"
-              value={chosen}
-              onChange={(e) => setMethod(e.target.value as CollectionMethod)}
-              className={inputCls}
-            >
+          <fieldset>
+            <legend className="mb-1.5 text-sm font-semibold text-slate-800">
+              Pay with
+            </legend>
+            <div className="grid gap-2 sm:grid-cols-2">
               {methods.map((m) => (
-                <option key={m.value} value={m.value}>
+                <button
+                  key={m.value}
+                  type="button"
+                  onClick={() => setMethod(m.value)}
+                  aria-pressed={chosen === m.value}
+                  className={`flex items-center gap-3 rounded-xl border p-3.5 text-left text-sm font-semibold transition ${
+                    chosen === m.value
+                      ? "border-brand-700 bg-brand-50 ring-2 ring-brand-200"
+                      : "border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <Icon
+                    name={
+                      m.value === "BANK_TRANSFER"
+                        ? "bank"
+                        : m.value === "CHEQUE"
+                        ? "doc"
+                        : "qr"
+                    }
+                    className="size-5 text-brand-700"
+                  />
                   {m.label}
-                </option>
+                </button>
               ))}
-            </select>
-          </Field>
+            </div>
+          </fieldset>
 
           <div className="rounded-xl bg-slate-50 p-4 text-sm">
-            <p className="font-semibold">Send your payment to</p>
+            <p className="font-semibold">Step 1. Send your payment to</p>
             <p className="mt-1">{selected!.accountName}</p>
             {selected!.bankName && <p>{selected!.bankName}</p>}
             <p className="font-mono text-base">{selected!.accountNumber}</p>
@@ -518,7 +597,7 @@ function PayPanel({
 
         <div className="space-y-4">
           <Field
-            label="Amount you paid (₱)"
+            label="Step 2. Amount you paid (₱)"
             htmlFor="amount"
             hint={`Minimum ${formatPeso(info.data.minAmount)}`}
           >
@@ -555,6 +634,8 @@ function PayPanel({
           </Field>
           {error && <Alert>{error}</Alert>}
           <Button
+            size="lg"
+            className="w-full"
             disabled={busy || reference.trim().length < 4}
             onClick={() => void submit()}
           >

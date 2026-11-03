@@ -11,8 +11,17 @@ import {
 import { formatDate, formatPeso, percent } from "../lib/format";
 import { inputCls } from "../lib/styles";
 import { useResource } from "../lib/useResource";
-import { Alert, Button, Empty, Loading, StatusBadge } from "../components/ui";
+// import { Alert, Button, Empty, Loading, StatusBadge } from "../components/ui";
 import { describePayout } from "./LoansScreen";
+import {
+  Alert,
+  Button,
+  Chips,
+  Empty,
+  Loading,
+  PageHeader,
+  StatusBadge,
+} from "../components/ui";
 
 const FILTERS: { label: string; value: LoanStatus | undefined }[] = [
   { label: "Needs review", value: "SUBMITTED" },
@@ -34,14 +43,12 @@ export default function AdminLoans({ token }: { token: string }) {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold">Loan applications</h1>
-        <p className="mt-2 text-slate-500">
-          Approve or reject applications, then release approved loans.
-        </p>
-      </div>
+      <PageHeader
+        title="Loan applications"
+        subtitle="Approve or reject applications, then release approved loans."
+      />
 
-      <div className="flex flex-wrap gap-2">
+      {/* <div className="flex flex-wrap gap-2">
         {FILTERS.map((f) => (
           <button
             key={f.label}
@@ -52,14 +59,23 @@ export default function AdminLoans({ token }: { token: string }) {
             aria-pressed={filter === f.value}
             className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${
               filter === f.value
-                ? "border-emerald-900 bg-emerald-900 text-white"
+                ? "border-brand-900 bg-brand-900 text-white"
                 : "border-slate-300 bg-white hover:bg-slate-50"
             }`}
           >
             {f.label}
           </button>
         ))}
-      </div>
+      </div> */}
+
+      <Chips
+        options={FILTERS}
+        value={filter}
+        onChange={(v) => {
+          setFilter(v);
+          setNotice("");
+        }}
+      />
 
       {notice && <Alert kind="success">{notice}</Alert>}
 
@@ -139,7 +155,7 @@ function ApplicationRow({
         <StatusBadge status={app.status} />
       </div>
 
-      <dl className="mt-4 grid gap-3 text-sm sm:grid-cols-4">
+      <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
         <Cell label="Rate" value={`${percent(app.monthlyRatePercent)} / mo`} />
         <Cell label="Net proceeds" value={formatPeso(q.netProceeds)} />
         <Cell label="Total repayment" value={formatPeso(q.totalRepayment)} />
@@ -266,7 +282,7 @@ function ApplicationRow({
 function Cell({ label, value }: { label: string; value: string }) {
   return (
     <div>
-      <dt className="text-xs uppercase text-slate-500">{label}</dt>
+      <dt className="text-xs text-slate-500">{label}</dt>
       <dd className="mt-0.5 font-semibold">{value}</dd>
     </div>
   );
