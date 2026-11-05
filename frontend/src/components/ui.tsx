@@ -26,6 +26,7 @@ const ICONS = {
   qr: "M4 4h6v6H4z M14 4h6v6h-6z M4 14h6v6H4z M14 14h2v2h-2z M18 18h2v2h-2z M14 19v1",
   bank: "M3 10 12 4l9 6 M5 10v8 M9.5 10v8 M14.5 10v8 M19 10v8 M3 20h18",
   doc: "M7 3h8l4 4v14H7z M15 3v4h4 M10 13h6 M10 17h4",
+  menu: "M4 7h16 M4 12h16 M4 17h16",
 } as const;
 
 export type IconName = keyof typeof ICONS;

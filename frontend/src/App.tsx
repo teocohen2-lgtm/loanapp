@@ -54,6 +54,17 @@ export default function App() {
   const [view, setView] = useState<View>("home");
   const [loanId, setLoanId] = useState<string | null>(null);
 
+  const [moreOpen, setMoreOpen] = useState(false);
+
+  // Escape closes the "More" sheet on phones.
+  useEffect(() => {
+    if (!moreOpen) return;
+    const onKey = (e: KeyboardEvent) =>
+      e.key === "Escape" && setMoreOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [moreOpen]);
+
   const setSession = useCallback((next: Session | null) => {
     saveSession(next);
     setSessionState(next);
@@ -110,6 +121,7 @@ export default function App() {
   const go = (next: View, id?: string) => {
     setView(next);
     setLoanId(id ?? null);
+    setMoreOpen(false);
     window.scrollTo({ top: 0 });
   };
 
@@ -120,8 +132,16 @@ export default function App() {
   const current: View = allowed ? view : "home";
   const activeNav = current === "loan" ? "loans" : current;
 
-  const isBorrower = user.role === "BORROWER";
+  // const isBorrower = user.role === "BORROWER";
   const items = NAV[user.role];
+
+  // Phone tab bar: up to 5 slots. With more sections (administrator), the first 4 show and the rest go under "More".
+  const MAX_TABS = 5;
+  const tabItems =
+    items.length <= MAX_TABS ? items : items.slice(0, MAX_TABS - 1);
+  const moreItems = items.slice(tabItems.length);
+  const moreActive = moreItems.some((n) => n.view === activeNav);
+  const slots = tabItems.length + (moreItems.length > 0 ? 1 : 0);
 
   return (
     <div className="min-h-screen bg-surface">
@@ -173,7 +193,7 @@ export default function App() {
         </div>
 
         {/* Staff have many sections: a swipeable row on phones. Borrowers get the bottom tab bar instead. */}
-        {!isBorrower && (
+        {/* {!isBorrower && (
           <nav
             className="flex gap-1 overflow-x-auto border-t border-slate-100 px-3 py-2 md:hidden"
             aria-label="Sections"
@@ -194,14 +214,10 @@ export default function App() {
               </button>
             ))}
           </nav>
-        )}
+        )} */}
       </header>
 
-      <main
-        className={`mx-auto max-w-6xl px-4 py-6 sm:px-6 sm:py-10 ${
-          isBorrower ? "pb-28 md:pb-10" : ""
-        }`}
-      >
+      <main className="mx-auto max-w-6xl px-4 py-6 pb-28 sm:px-6 sm:py-10 md:pb-10">
         {current === "home" && (
           <Dashboard token={session.token} user={user} go={go} />
         )}
@@ -238,7 +254,7 @@ export default function App() {
         InstaPay or PESONet payouts are made.
       </footer>
 
-      {isBorrower && (
+      {/* {isBorrower && (
         <nav
           className="safe-bottom fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden"
           aria-label="Main"
@@ -274,7 +290,116 @@ export default function App() {
             })}
           </ul>
         </nav>
+      )} */}
+
+      {/* "More" sheet (phones, administrator only): the sections that do not fit in the tab bar. */}
+      {moreOpen && moreItems.length > 0 && (
+        <div className="fixed inset-0 z-40 md:hidden">
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setMoreOpen(false)}
+            className="absolute inset-0 bg-brand-950/40"
+          />
+          <div
+            role="dialog"
+            aria-label="More sections"
+            className="absolute inset-x-0 bottom-0 rounded-t-3xl bg-white p-3 pb-24 shadow-2xl"
+          >
+            <span className="mx-auto mb-2 block h-1 w-10 rounded-full bg-slate-300" />
+            <ul className="space-y-1">
+              {moreItems.map((n) => {
+                const on = activeNav === n.view;
+                return (
+                  <li key={n.view}>
+                    <button
+                      type="button"
+                      onClick={() => go(n.view)}
+                      aria-current={on ? "page" : undefined}
+                      className={`flex min-h-14 w-full items-center gap-4 rounded-2xl px-4 text-left text-base font-semibold ${
+                        on
+                          ? "bg-brand-900 text-white"
+                          : "text-slate-800 active:bg-slate-100"
+                      }`}
+                    >
+                      <Icon name={n.icon} className="size-6" />
+                      {n.label}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        </div>
       )}
+
+      {/* Phone tab bar for every role. Desktop uses the top navigation. */}
+      <nav
+        className="safe-bottom fixed inset-x-0 bottom-0 z-50 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden"
+        aria-label="Main"
+      >
+        <ul
+          className="mx-auto grid max-w-md"
+          style={{ gridTemplateColumns: `repeat(${slots}, minmax(0, 1fr))` }}
+        >
+          {tabItems.map((n) => {
+            const on = activeNav === n.view && !moreOpen;
+            return (
+              <li key={n.view}>
+                <button
+                  type="button"
+                  onClick={() => go(n.view)}
+                  aria-current={on ? "page" : undefined}
+                  className="flex w-full flex-col items-center gap-1 px-1 pb-1 pt-2.5"
+                >
+                  <span
+                    className={`grid h-8 w-14 place-items-center rounded-full transition ${
+                      on ? "bg-brand-900 text-white" : "text-slate-500"
+                    }`}
+                  >
+                    <Icon name={n.icon} className="size-5" />
+                  </span>
+                  <span
+                    className={`text-xs font-semibold ${
+                      on ? "text-brand-900" : "text-slate-500"
+                    }`}
+                  >
+                    {n.label}
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+          {moreItems.length > 0 && (
+            <li>
+              <button
+                type="button"
+                onClick={() => setMoreOpen((o) => !o)}
+                aria-expanded={moreOpen}
+                aria-haspopup="dialog"
+                className="flex w-full flex-col items-center gap-1 px-1 pb-1 pt-2.5"
+              >
+                <span
+                  className={`grid h-8 w-14 place-items-center rounded-full transition ${
+                    moreActive || moreOpen
+                      ? "bg-brand-900 text-white"
+                      : "text-slate-500"
+                  }`}
+                >
+                  <Icon name="menu" className="size-5" />
+                </span>
+                <span
+                  className={`text-xs font-semibold ${
+                    moreActive || moreOpen ? "text-brand-900" : "text-slate-500"
+                  }`}
+                >
+                  More
+                </span>
+              </button>
+            </li>
+          )}
+        </ul>
+      </nav>
     </div>
   );
 }
